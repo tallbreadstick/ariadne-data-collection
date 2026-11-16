@@ -1,0 +1,6 @@
+/target
+.env
+.env.extension.local
+.postgres/
+certs/
+.pgweb.log
