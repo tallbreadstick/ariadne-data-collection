@@ -22,7 +22,7 @@ impl Config {
         Ok(Self {
             database_url,
             ingest_api_key,
-            bind_addr: env::var("PORT").or_else(|_| env::var("BIND_ADDR")).unwrap_or_else(|_| "0.0.0.0:8080".into()),
+            bind_addr: env::var("BIND_ADDR").unwrap_or_else(|_| format!("0.0.0.0:{}", env::var("PORT").unwrap_or_else(|_| "8080".into()))),
             max_body_bytes: env::var("ARIADNE_MAX_BODY_BYTES")
                 .ok()
                 .and_then(|v| v.parse().ok())

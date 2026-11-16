@@ -2,7 +2,7 @@
 name = "ariadne-data-collection"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.89"
 description = "HTTPS ingestion server for anonymous Ariadne session metrics"
 license = "UNLICENSED"
 
