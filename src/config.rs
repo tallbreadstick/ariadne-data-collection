@@ -1,5 +1,4 @@
 use std::env;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
@@ -7,10 +6,7 @@ use anyhow::{Context, Result};
 pub struct Config {
     pub database_url: String,
     pub ingest_api_key: String,
-    pub tls_cert: PathBuf,
-    pub tls_key: PathBuf,
-    pub https_addr: String,
-    pub http_redirect_port: u16,
+    pub bind_addr: String,
     pub max_body_bytes: usize,
 }
 
@@ -26,17 +22,7 @@ impl Config {
         Ok(Self {
             database_url,
             ingest_api_key,
-            tls_cert: env::var("ARIADNE_TLS_CERT")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("./certs/cert.pem")),
-            tls_key: env::var("ARIADNE_TLS_KEY")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("./certs/key.pem")),
-            https_addr: env::var("ARIADNE_HTTPS_ADDR").unwrap_or_else(|_| "0.0.0.0:8443".into()),
-            http_redirect_port: env::var("ARIADNE_HTTP_REDIRECT_PORT")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(8080),
+            bind_addr: env::var("PORT").or_else(|_| env::var("BIND_ADDR")).unwrap_or_else(|_| "0.0.0.0:8080".into()),
             max_body_bytes: env::var("ARIADNE_MAX_BODY_BYTES")
                 .ok()
                 .and_then(|v| v.parse().ok())

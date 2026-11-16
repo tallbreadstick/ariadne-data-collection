@@ -1,6 +1,6 @@
 # ariadne-data-collection
 
-HTTPS ingestion server for **anonymous** Ariadne session metrics during live study periods. The VS Code extension sends aggregated scores and CWE-level lifecycle summaries — never source paths, fingerprints, or rule ids.
+Plain-HTTP ingestion server for **anonymous** Ariadne session metrics during live study periods. The VS Code extension sends aggregated scores and CWE-level lifecycle summaries — never source paths, fingerprints, or rule ids.
 
 ## Participant identity
 
@@ -33,10 +33,10 @@ The server rejects requests that still contain those keys.
 
 ## API
 
-All ingest routes require TLS.
+All ingest routes are protected by the shared bearer token; Railway terminates TLS upstream, so the app listens on plain HTTP.
 
 - `GET /health` — liveness (`{"status":"ok"}`)
-- `POST /v1/ingest` — metrics ingest
+- `POST /v1/session-forward` — raw session-forward capture
 
 Headers:
 
@@ -75,39 +75,39 @@ Success: `202`-style body `{"accepted":true,"eventId":"<uuid>"}` with HTTP 200.
 
 Errors: JSON `{"error":"..."}` with `400`, `401`, or `500`.
 
-Plain HTTP on `ARIADNE_HTTP_REDIRECT_PORT` (default `8080`) issues a **301** redirect to the HTTPS port.
-
 ## Local development
 
-One command (Postgres, certs, env, ingest server, and **browser DB UI**):
+One command (Postgres, env, ingest server, and browser DB UI):
 
 ```bash
-nix develop   # postgres, openssl, pgweb on PATH
+nix develop
 ./run_server.sh
 ```
 
-- Ingest API: `https://127.0.0.1:8443`
-- **DB browser (pgweb):** [http://127.0.0.1:8081/](http://127.0.0.1:8081/) — browse `participants`, `observation_sessions`, `ingest_events` (no extra login; local dev only). If the page is blank, check `.pgweb.log` or run `./run_server.sh --stop` and start again (pgweb is auto-fetched via `nix` when not on `PATH`).
+- Ingest API: `http://127.0.0.1:8080`
+- **DB browser (pgweb):** [http://127.0.0.1:8081/](http://127.0.0.1:8081/)
 
-`./run_server.sh --release` for an optimized build. `./run_server.sh --no-db-ui` skips pgweb. **Stop:** Ctrl+C in the same terminal (stops ingest, pgweb, and Postgres if this script started it). From another terminal: `./run_server.sh --stop`. Change the UI port with `ARIADNE_PGWEB_PORT` in `.env`.
+`./run_server.sh --release` for an optimized build. `./run_server.sh --no-db-ui` skips pgweb. **Stop:** Ctrl+C in the same terminal. From another terminal: `./run_server.sh --stop`.
 
 Manual flow:
 
 ```bash
-nix develop   # Postgres, openssl dev cert, .env bootstrap
-cp .env.example .env   # if not auto-created — set API key + pepper (32+ / 16+ chars)
+cp .env.example .env
 cargo run
 ```
 
-Migrate runs automatically on startup (`sqlx::migrate!`).
+Migrations run automatically on startup (`sqlx::migrate!`).
 
-Generate trusted local certs with `mkcert` if needed:
+## Railway deployment
 
-```bash
-mkcert -install
-mkcert -cert-file certs/cert.pem -key-file certs/key.pem localhost 127.0.0.1
-```
+Set these environment variables in Railway:
+
+- `DATABASE_URL` — the Railway Postgres connection string
+- `ARIADNE_INGEST_API_KEY` — a long shared secret, at least 32 chars
+- `PORT` — Railway sets this automatically; default is `8080`
+
+The app listens on plain HTTP and expects TLS to be terminated upstream by Railway. The health endpoint is available at `/health`.
 
 ## Configuration
 
-See `.env.example` for `DATABASE_URL`, `ARIADNE_INGEST_API_KEY`, `ARIADNE_USER_ID_PEPPER`, TLS paths, bind address, redirect port, pgweb port, and max body size.
+See `.env.example` for `DATABASE_URL`, `ARIADNE_INGEST_API_KEY`, `PORT`, pgweb settings, and max body size.

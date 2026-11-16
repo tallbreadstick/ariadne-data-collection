@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start local Postgres (if needed), ensure dev TLS + env, then run the HTTPS ingest server.
+# Start local Postgres (if needed), ensure local env, then run the HTTP ingest server.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,8 +22,8 @@ usage() {
   cat <<'EOF'
 Usage: ./run_server.sh [options]
 
-  Starts embedded/local Postgres (when using ./.postgres), prepares certs and env,
-  builds if needed, and runs the Ariadne metrics ingest server (HTTPS + HTTP redirect).
+  Starts embedded/local Postgres (when using ./.postgres), prepares env,
+  builds if needed, and runs the Ariadne metrics ingest server over plain HTTP.
   Also starts pgweb on 127.0.0.1:8081 for a browser DB UI (override with ARIADNE_PGWEB_PORT).
 
 Options:
@@ -35,10 +35,10 @@ Options:
 Environment:
   PGDATA, PGPORT, PGHOST — Postgres data dir and connection (defaults: ./.postgres, 5433, 127.0.0.1)
   DATABASE_URL           — overrides default postgres://ariadne:ariadne@127.0.0.1:$PGPORT/ariadne_metrics
+  PORT                  — bind port for the app (default 8080)
   Other vars: see .env.example (loaded from .env when present)
 
-Requires: cargo, openssl; Postgres tools (initdb, pg_ctl, psql, pg_isready) on PATH
-          (e.g. nix develop, or system postgresql).
+Requires: cargo; Postgres tools (initdb, pg_ctl, psql, pg_isready) on PATH.
 EOF
 }
 
@@ -59,6 +59,24 @@ need_cmd() {
     echo "Tip: run 'nix develop' in this directory, or install PostgreSQL client/server tools." >&2
     exit 1
   fi
+}
+
+generate_dev_api_key() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+    return
+  fi
+
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+
+  echo "Unable to generate a dev API key: neither python3 nor openssl is available." >&2
+  exit 1
 }
 
 ensure_env_file() {
@@ -85,27 +103,12 @@ ensure_env_file() {
 ensure_dev_secrets() {
   local key="${ARIADNE_INGEST_API_KEY:-}"
   if [[ "$key" == "change-me-before-production" || ${#key} -lt 32 ]]; then
-    key="$(openssl rand -hex 32)"
+    key="$(generate_dev_api_key)"
     export ARIADNE_INGEST_API_KEY="$key"
     echo "Generated dev ARIADNE_INGEST_API_KEY (export only; update .env for a fixed value)"
   fi
 }
 
-ensure_tls_certs() {
-  local cert="${ARIADNE_TLS_CERT:-./certs/cert.pem}"
-  local key="${ARIADNE_TLS_KEY:-./certs/key.pem}"
-  if [[ "$cert" != /* ]]; then cert="$ROOT/$cert"; fi
-  if [[ "$key" != /* ]]; then key="$ROOT/$key"; fi
-  if [[ ! -f "$cert" || ! -f "$key" ]]; then
-    mkdir -p "$(dirname "$cert")"
-    echo "Generating self-signed TLS certificate in $(dirname "$cert")"
-    openssl req -x509 -newkey rsa:2048 -nodes \
-      -keyout "$key" -out "$cert" -days 825 \
-      -subj "/CN=localhost" 2>/dev/null
-  fi
-  export ARIADNE_TLS_CERT="$cert"
-  export ARIADNE_TLS_KEY="$key"
-}
 
 postgres_using_local_data_dir() {
   [[ "$(realpath "$PGDATA" 2>/dev/null || echo "$PGDATA")" == "$(realpath "$ROOT/.postgres" 2>/dev/null || echo "$ROOT/.postgres")" ]] \
@@ -259,7 +262,6 @@ cleanup() {
 }
 
 need_cmd cargo
-need_cmd openssl
 need_cmd initdb
 need_cmd pg_ctl
 need_cmd psql
@@ -268,7 +270,8 @@ need_cmd pg_isready
 ensure_env_file
 export DATABASE_URL="${DATABASE_URL:-postgres://${PGUSER}:ariadne@${PGHOST}:${PGPORT}/${PGDATABASE}}"
 ensure_dev_secrets
-ensure_tls_certs
+
+export PORT="${PORT:-8080}"
 
 if [[ "$STOP_ONLY" == 1 ]]; then
   echo "Stopping ingest server, pgweb, and local Postgres (if any)..."
@@ -297,7 +300,7 @@ CARGO_ARGS=(run)
 [[ "$RELEASE" == 1 ]] && CARGO_ARGS=(run --release)
 
 echo "DATABASE_URL=$DATABASE_URL"
-echo "HTTPS=${ARIADNE_HTTPS_ADDR:-0.0.0.0:8443}  HTTP redirect port=${ARIADNE_HTTP_REDIRECT_PORT:-8080}"
+echo "HTTP bind=${PORT:-8080}"
 start_pgweb
 echo "Building and starting ingest server... (Ctrl+C or ./run_server.sh --stop to shut down)"
 echo
