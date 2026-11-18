@@ -10,5 +10,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/v1/session-forward", post(ingest::post_session_forward))
+        .route("/v1/session-forward/handshake", post(ingest::post_handshake))
+        .route("/v1/session-forward/diff", post(ingest::post_diff))
         .with_state(state)
 }

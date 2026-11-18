@@ -10,6 +10,7 @@ mod validate;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use axum::extract::DefaultBodyLimit;
 use axum::Router;
@@ -20,7 +21,7 @@ use tracing_subscriber::EnvFilter;
 use crate::config::Config;
 use crate::db::Store;
 use crate::routes::router;
-use crate::state::AppState;
+use crate::state::{AppState, ChunkBuffer};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -39,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         store: Store::new(pool),
         ingest_api_key: Arc::from(config.ingest_api_key),
+        chunk_buffer: Arc::new(Mutex::new(ChunkBuffer::default())),
     };
 
     let app: Router = router(state)

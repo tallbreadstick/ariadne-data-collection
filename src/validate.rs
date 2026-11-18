@@ -2,7 +2,9 @@ use chrono::Utc;
 
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    FeatureCounts, SessionForwardPayload, SESSION_FORWARD_FORMAT, SESSION_FORWARD_VERSION,
+    ClientInfo, DiffRequest, FeatureCounts, HandshakeRequest, SessionForwardPayload, DIFF_FORMAT,
+    DIFF_VERSION, HANDSHAKE_FORMAT, HANDSHAKE_VERSION, SESSION_FORWARD_FORMAT,
+    SESSION_FORWARD_VERSION,
 };
 
 pub fn validate_session_forward_payload(body: &SessionForwardPayload) -> AppResult<()> {
@@ -37,7 +39,46 @@ pub fn validate_session_forward_payload(body: &SessionForwardPayload) -> AppResu
     Ok(())
 }
 
-fn validate_client(client: &crate::models::ClientInfo) -> AppResult<()> {
+pub fn validate_handshake_request(req: &HandshakeRequest) -> AppResult<()> {
+    if req.format != HANDSHAKE_FORMAT {
+        return Err(AppError::BadRequest("unsupported format".into()));
+    }
+    if req.version != HANDSHAKE_VERSION {
+        return Err(AppError::BadRequest("unsupported version".into()));
+    }
+    if req.workspace_id.trim().is_empty() {
+        return Err(AppError::BadRequest("workspaceId is required".into()));
+    }
+    if req.client_state_hash.trim().is_empty() {
+        return Err(AppError::BadRequest("clientStateHash is required".into()));
+    }
+    Ok(())
+}
+
+pub fn validate_diff_request(req: &DiffRequest) -> AppResult<()> {
+    if req.format != DIFF_FORMAT {
+        return Err(AppError::BadRequest("unsupported format".into()));
+    }
+    if req.version != DIFF_VERSION {
+        return Err(AppError::BadRequest("unsupported version".into()));
+    }
+    if req.workspace_id.trim().is_empty() {
+        return Err(AppError::BadRequest("workspaceId is required".into()));
+    }
+    if req.target_state_hash.trim().is_empty() {
+        return Err(AppError::BadRequest("targetStateHash is required".into()));
+    }
+    if req.chunk.chunk_id.trim().is_empty() {
+        return Err(AppError::BadRequest("chunkId is required".into()));
+    }
+    if req.chunk.index == 0 || req.chunk.total_chunks == 0 || req.chunk.index > req.chunk.total_chunks {
+        return Err(AppError::BadRequest("invalid chunk index/totalChunks".into()));
+    }
+    validate_client(&req.client)?;
+    Ok(())
+}
+
+fn validate_client(client: &ClientInfo) -> AppResult<()> {
     if client.extension_version.trim().is_empty() || client.extension_version.trim().len() > 64 {
         return Err(AppError::BadRequest("invalid extensionVersion".into()));
     }
